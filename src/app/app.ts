@@ -6,7 +6,7 @@ import { ThemeOptionDirective } from './theme-option.directive';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, NgFor, ThemeOptionDirective],
+  imports: [NgFor, ThemeOptionDirective],
   templateUrl: './app.html',
   styleUrl: './app.scss'
 })
@@ -14,16 +14,18 @@ export class App {
    btns: any[] = BUTTONS;
 
    // Logic properties
-  firstValue: number = 0;
-  operator: string = ''
-  allValues: string = '';
+  firstValue = signal<string>('0');
+  operator = signal<string>('');
+  allValues = signal<string>('');
+  lastValue = signal<string>('');
+  shouldReset = signal<boolean>(false);
 
   // Design properties
   state: string[] = STATE;
-  option: number = 1;
-  currentOption: string = this.state[0];
+  option = signal<number>(1);
+  currentOption = signal<string>(this.state[0]);
 
-  onDesignChange(){
+  onDesignChange() {
     this.changeUI();
   }
 
@@ -33,37 +35,13 @@ export class App {
     this.handleKeyboardEvent(customKey);
   }
 
-  onPress(key: string){
+  onPress(key: string) {
     this.analyzeKey(key);
   }
 
-
-  public get getAllValues(): string {
-    return this.allValues;
-  }
-
-  public get getOperator(): string {
-    return this.operator;
-  }
-
-  public get getFirstValue(): number {
-    return this.firstValue;
-  }
-
-
-
-  public get getOption(): number {
-    return this.option;
-  }
-
-  public get getCurrentOption(): string {
-    return this.currentOption;
-  }
-
   changeUI() {
-    this.option++;
-    this.option = this.option > 3 ? 1 : this.option;
-    this.currentOption = this.state[this.option - 1];
+    this.option.update(value => value > 2 ? 1 : value + 1);
+    this.currentOption.set(this.state[this.option() - 1]);
   }
 
 
@@ -99,88 +77,74 @@ export class App {
       case '7':
       case '8':
       case '9':
-        this.allValues += key;
+        if (this.shouldReset()) {
+          this.allValues.set(key);
+          this.shouldReset.set(false);
+        } else {
+          this.allValues.set(this.allValues() + key);
+        }
         break;
       case '.':
-        if (this.allValues.length <= 0) {
-          this.allValues += '0.'
-        }
-        if (!this.allValues.includes('.')) {
-          this.allValues += key;
+        if (!this.allValues().includes('.')) {
+          this.allValues.set(this.allValues() + key);
         }
         break;
       case '+':
       case '-':
       case 'x':
       case '/':
-        if(this.operator){
-          if(key === '-'){
-            if(this.allValues[0]!== '-'){
-              this.allValues = '-'+this.allValues;
-              break;
-            }
-          }
-        }
-        if (!this.operator) {
-          this.firstValue = +this.allValues;
-          this.allValues = '';
-          this.operator = key;
-        } else {
-          if (this.allValues && this.allValues !== '-') {
-            this.firstValue = this.compute();
-            this.allValues = '';
-          }
-          this.operator = key;
-        }
+        this.compute(key);
         break;
       case '=':
-        if (this.firstValue && this.allValues && this.allValues !== '-') {
-          this.allValues = String(this.compute());
-          this.operator = '';
-          this.firstValue = 0;
-        }
+        this.compute(key);
         break;
       case 'DEL':
-        if (this.allValues) {
-          this.allValues = this.allValues.slice(0, this.allValues.length - 1);
+        if (this.allValues()) {
+          this.allValues.set(this.allValues().slice(0, this.allValues().length - 1));
         }
         break;
       case 'RESET':
-        this.allValues = '';
-        this.operator = '';
-        this.firstValue = 0;
+        this.allValues.set('');
+        this.operator.set('');
+        this.firstValue.set('0');
         break;
       default:
         break;
     }
-    this.allValues = this.lengthChecker();
   }
 
-  lengthChecker() {
-    if (this.allValues.length > 15) {
-      return this.allValues.slice(0, 15);
+  compute(key: string) {
+    if (key === '=') {
+      if (this.allValues() === '' || this.operator() === '') return;
+
+      const result = this.calculate();
+      this.allValues.set(String(result));
+      this.firstValue.set('0');
+      this.operator.set('');
+      this.shouldReset.set(true);
+    } else { // Operator
+      if (this.operator() !== '' && this.allValues()  !== '') {
+        const result = this.calculate();
+        this.firstValue.set(String(result));
+        this.allValues.set('');
+      } else if (this.firstValue() === '0') {
+        this.firstValue.set(this.allValues());
+         this.allValues.set('');
+      }
+      this.operator.set(key);
     }
-    return this.allValues;
   }
 
-  compute() {
-    let ans: number = 0;
-    switch (this.operator) {
-      case '+':
-        ans = (this.firstValue + +this.allValues);
-        break;
-      case '-':
-        ans = (this.firstValue - +this.allValues);
-        break;
-      case 'x':
-        ans = (this.firstValue * +this.allValues);
-        break;
-      case '/':
-        ans = (this.firstValue / +this.allValues);
-        break;
-      default:
-        break;
+  calculate(): number {
+    const first = parseFloat(this.firstValue());
+    const second = parseFloat(this.allValues());
+
+    switch (this.operator()) {
+      case '+': return first + second;
+      case '-': return first - second;
+      case 'x': return first * second;
+      case '/': return first / second;
+      default: return second;
     }
-    return Math.round(ans * 1000000000000) / 1000000000000;
   }
 }
